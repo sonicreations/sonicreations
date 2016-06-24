@@ -1,0 +1,1375 @@
+// hi this is prashant soni (sonicreations)
+//ALL MY CODE WILL BE RELAXED HERE
+#include "syst.h"
+#include "vers.h"
+#include "wkss.h"
+#include "rpim.h"
+#include "rpip.h"
+#include "linp.h"
+#include "batp.h"
+#include "mmim.h"
+#include "netc.h"
+#include "dimm.h"
+#include "dspp.h"
+/*______ L O C A L - D E F I N E S ___________________________________________*/
+
+#define  RPIM_DELAY     SYST_RPIM_TASK_DELAY
+#define  RPIM_PERIOD    SYST_RPIM_TASK_PERIOD
+
+#define  RPIM_PRE_STEP_INDENTIFIER   ((ubyte)0x05)/*$5 while entering into prestep*/
+#define  RPIM_FLASH_PROG_IDENTIFIER  ((ubyte)0x0A)/*$A while entering into programming*/
+
+#define  Rpim_DNC_STEP_INITIAL_COUNTS ((ubyte)0x02)
+#define  Rpim_PRE_STEP_INITIAL_COUNTS ((ubyte)0x02)
+
+/*______ L O C A L - T Y P E S _______________________________________________*/
+ubyte DCDStatusCAN = FALSE;
+static RPIM_EcuMode_t GenDncMode;
+static RPIM_EcuMode_t GenDiagDncMode;
+static ubyte RPIM_DNCmodeStatus = 0;
+static ubyte Dnc_status_value[ECU_EOM_DIS_MSG]={0};
+static ubyte Dcd_status_value[ECU_EOM_DIS_MSG]={0};
+static NETC_RxStatus_t DNC_RxStatus[ECU_EOM_DIS_MSG],DCD_RxStatus[ECU_EOM_DIS_MSG];
+static NETC_DisableNormalComm_t ParamValue_DNC[ECU_EOM_DIS_MSG],ParamValue_DCD[ECU_EOM_DIS_MSG];
+static RPIM_DiagDncMsgNode_t Message;
+ushort DiagCounter = 49;
+ubyte Disable_Normal_Communication_Status;
+extern ubyte DiagControlforSpeed;
+extern ubyte DiagControlforRpm;
+extern ubyte DiagControlforLum;
+extern ubyte DiagControlforColour;
+extern ubyte DiagControlforTelltales;
+extern ubyte DiagControlforBuzz;
+extern ubyte Diag_LCD_On;
+
+/*______ G L O B A L - D A T A _______________________________________________*/
+
+RPIM_EcuMode_t RPIM_EcmMode;
+RPIM_EcuMode_t RPIM_DiagMode;
+
+RPIM_DiagDncMsgNode_t RPIM_Msg;
+static RPIM_DiagDncMsgNode_t RPIM_DncMsg,Saved_RPIM_DncMsg;
+RPIM_DiagDncMsgNode_t RPIM_DiagMsg,Saved_RPIM_Msg,Saved_RPIM_Status,Saved_RPIM_DiagMsg;
+RPIM_EcuMode_t RPIM_TcmMode;
+RPIM_EcuMode_t RPIM_DiagDncMode;
+RPIM_EcuMode_t RPIM_DiagDncDisNormCommStatus;
+RPIM_DiagDncMsgNode_t Rpim_comm_flag,Saved_Rpim_comm_flag;
+RPIM_DiagDncMsgNode_t Rpim_flag,Saved_Rpim_flag;
+RPIM_DiagDncMsgNode_t Rpim_Status,Saved_Rpim_Status;
+RPIM_DiagDncMsgNode_t RPIM_Msg1,RPIM_Msg2;
+static RPIM_DiagDncMsgNode_t Dnc_msg,Diag_msg;
+static ubyte count1[ECU_EOM_DIS_MSG],count2[ECU_EOM_DIS_MSG],SignalInProgress,Pass_Flag,dis_com_flag[ECU_EOM_DIS_MSG],Rpim_DNCModeMsgCount;
+static ulong Dis_Comm_Dnc_flag,Saved_Dis_Comm_Dnc_flag;
+static ubyte countA[ECU_EOM_DIS_MSG],countB[ECU_EOM_DIS_MSG],MsgInProgress,dcd_com_flag[ECU_EOM_DIS_MSG],Proc_Flag;
+static ulong Dis_Comm_Diag_flag,Saved_Dis_Comm_Diag_flag;
+/*______ P R I V A T E - D A T A _____________________________________________*/
+
+
+/*______ L O C A L - D A T A _________________________________________________*/
+
+/*As we have the two nos of ECU :-> ECM and TCM so variables for them         */
+
+static RPIP_GenDisNorComm_t RPIM_EcmDisNormComm; /* For Engine control module */
+static RPIP_GenDisNorComm_t RPIM_DiagDncDisNormComm; /* For new control module */
+
+static ubyte Rpim_EcmPreStepModeMsgCount;
+static ubyte Rpim_DiagDncPreStepModeMsgCount;
+static ubyte Rpim_DiagPreStepModeMsgCount;
+static ubyte Rpim_EcmDisNormCommModeMsgCount;
+static ubyte Rpim_DncDisModeMsgCount;
+static ubyte Rpim_DiagDisNormCommModeMsgCount;
+static bool_t Rpim_EcmPreSetModeOver;
+static bool_t Rpim_DiagDncPreSetModeOver;
+static bool_t Rpim_DiagPreSetModeOver;
+static ubyte CheckDiagStatus[ECU_EOM_DIS_MSG];
+static ubyte CheckDncStatus[ECU_EOM_DIS_MSG];
+/*  For Transmission control module  */
+//static ubyte pass_flagDiag = 0;
+Return_data_t SavedDiagInfo={0};
+Return_data_t Return_Dncdata= {0};
+Return_data_t Return_Dcddata= {0};
+//Return_dataDiag_t Return_dataDiag= {0};
+Return_data_t ReturnSaveInfo={0};
+static Return_data_t Rpim_CheckDncModeStatus(void);
+static Return_data_t Rpim_CheckDcdModeStatus(void);
+static long double pow(long double x, long double y);
+/*************************************************************************************/
+#ifdef RPIP_TRANSMISSION_CONTROL_MODULE
+static RPIP_GenDisNorComm_t RPIM_TcmDisNormComm;
+static ubyte Rpim_TcmPreStepModeMsgCount;
+static ubyte Rpim_TcmDisNormCommModeMsgCount;
+static bool_t Rpim_TcmPreSetModeOver;
+#endif /*RPIP_TRANSMISSION_CONTROL_MODULE*/
+/*______ L O C A L - M A C R O S _____________________________________________*/
+
+
+/*______ I M P O R T - F U N C T I O N S - P R O T O T Y P E S _______________*/
+
+
+/*______ L O C A L - F U N C T I O N S - P R O T O T Y P E S _________________*/
+
+static RPIM_EcuMode_t Rpim_CheckEcmStatus(void);
+static RPIM_EcuMode_t Rpim_CheckTcmStatus(void);
+
+
+static RPIM_EcuMode_t Rpim_CheckDiagStatus(void);
+static RPIM_EcuMode_t Rpim_CheckDncStatus(void);
+
+static void Rpim_CheckDiagDncValueStatus(void);
+
+static void Rpim_CheckMessage(RPIM_DiagDncMsgNode_t,RPIM_Mode_Status_t);
+static void Rpim_ReInitCount(RPIM_DiagDncMsgNode_t,RPIM_Mode_Status_t);
+static RPIM_DiagDncMsgNode_t Rpim_FlagDisplayStatus(ulong);
+
+/*______ G L O B A L - F U N C T I O N S _____________________________________*/
+
+/******************************************************************************/
+/* Name : RPIM_Init                                                           */
+/* Role : Allows to initialise the RPIM module                                */
+/* Interface : none                                                           */
+/* Pre-condition :                                                            */
+/* Behaviour :                                                                */
+/*   DO                                                                       */
+/*    [ Reset all the Can Messages counter    ]                               */
+/*   OD                                                                       */
+/******************************************************************************/
+void RPIM_Init(void)
+{
+  Rpim_EcmDisNormCommModeMsgCount = 0;
+  Rpim_EcmPreSetModeOver = FALSE;
+  Rpim_EcmPreStepModeMsgCount = 0;
+
+  RPIM_EcmDisNormComm.Value = 0;
+  RPIM_EcmDisNormComm.NewFrame = FALSE;
+  RPIM_EcmDisNormComm.Status   = RPIP_DNC_VAL_VALID;
+  /* For Transmitting the State of the ECM to the DSPM Module*/
+  RPIM_EcmMode.Mode = RPIM_NORMAL;
+  RPIM_EcmMode.CanTransNormal = TRUE;
+
+  #ifdef RPIP_TRANSMISSION_CONTROL_MODULE
+
+  Rpim_TcmDisNormCommModeMsgCount = 0;
+  Rpim_TcmPreSetModeOver = FALSE;
+  Rpim_TcmPreStepModeMsgCount = 0;
+
+  RPIM_TcmDisNormComm.Value = 0;
+  RPIM_TcmDisNormComm.NewFrame = FALSE;
+  RPIM_TcmDisNormComm.Status   = RPIP_DNC_VAL_VALID;
+
+  /* For Transmitting the State of the TCM to the DSPM Module*/
+  RPIM_TcmMode.Mode = RPIM_NORMAL;
+  RPIM_TcmMode.CanTransNormal = TRUE;
+
+  #endif /*RPIP_TRANSMISSION_CONTROL_MODULE*/
+  GenDncMode.CanTransNormal = TRUE;
+  GenDncMode.ECU_Name = NO_ECU_DIS_MSG;
+  GenDncMode.Mode = RPIM_NORMAL;
+  Rpim_flag=NO_ECU_DIS_MSG;
+  Saved_Rpim_flag=NO_ECU_DIS_MSG;
+
+}
+
+/******************************************************************************/
+/* Name : RPIM_Task_ts                                                        */
+/* Role : Read CAN value of Disble normal communication from both ECM and TCM */
+/*        and Raise the flag for stoping transmission of CAN from all ECU and */
+/*        send the signal for the LCD for the reprogramming indication        */
+/* Interface: none                                                            */
+/* Pre-condition : none                                                       */
+/* Constraints : none                                                         */
+/* Behavior :                                                                 */
+/* DO                                                                         */
+/*  IF (Request to shift to the Programming mode) THEN   		      */
+/*       Start Counting the required Counts                                   */
+/*    IF (Entered into The Flash programming mode) THEN                       */
+/*         [Give an Alert on the LCD for the same ]			      */
+/*      IF (Progamming Succeded and Ignition off ) THEN                       */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*      IF ( Ignition Off ) THEN  					      */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*      ELSE                                                                  */
+/*        [Perform the normal operation]                                      */
+/*      FI                                                                    */
+/*    FI                                                                      */
+/*  FI                                                                        */
+/* OD                                                                         */
+/******************************************************************************/
+TASK (RPIM_Task_ts)
+{
+  if(DiagCounter < 49)
+  {
+    DiagCounter++;
+  }
+  else
+  {
+    DiagControlforSpeed = 0;
+    DiagControlforRpm = 0;
+    if((DiagControlforLum == 1) || (DiagControlforColour == 1))
+    {
+      Dimm_RequiredLuminanceLevelOld = 10;
+      if(DiagControlforColour == 1)
+      {
+         Colour_LevelPrev = 8;
+      }
+    }
+    DiagControlforLum = 0;
+    DiagControlforColour = 0;
+    Diag_LCD_On = FALSE;
+    DiagControlforTelltales = 0;
+    if(DiagControlforBuzz == 1)
+    {
+      DiagControlforBuzz = 2;
+    }
+  }
+  if(MMIM_SysCurrentState () != MMIM_BATT_IGN_NORMAL)
+  {
+    if((DiagControlforLum == 1) || (DiagControlforColour == 1))
+    {
+      Dimm_RequiredLuminanceLevelOld = 10;
+      if(DiagControlforColour == 1)
+      {
+         Colour_LevelPrev = 8;
+      }
+    }
+    DiagControlforSpeed = 0;
+    DiagControlforRpm = 0;
+    DiagControlforLum = 0;
+    DiagControlforColour = 0;
+    Diag_LCD_On = FALSE;
+    DiagControlforTelltales = 0;
+    RPIM_Msg1 = NO_ECU_DIS_MSG;
+    RPIM_Msg2 = NO_ECU_DIS_MSG;
+    if(DiagControlforBuzz == 1)
+    {
+      DiagControlforBuzz = 2;
+    }
+  }
+  RPIM_EcmMode  = Rpim_CheckDncStatus();
+  RPIM_DiagMode = Rpim_CheckDiagStatus();
+
+  if(RPIM_Msg1>RPIM_Msg2)
+  {
+    RPIM_Msg = RPIM_Msg1;
+  }
+  else
+  {
+    RPIM_Msg = RPIM_Msg2;
+  }
+   /* Using the above set Flags for the RPIM_TCM & RPIM_ECM mode we can */
+    /*  use detect the presence of Re-programming mode in DSPM */
+  WKSS_TaskState(RPIM_Task_al, WKSS_INACTIVE_TASK);
+  TerminateTask();
+}
+/******************************************************************************/
+/*Name : RPIM_GetEcmCurrentState                                              */
+/*Role : Returns the Current state of the ECM				      */
+/*Interface :                                                                 */
+/*Pre-condition : none                                                        */
+/*Constraints :                                                               */
+/*  DO                                                                        */
+/*Behavior :                                                                  */
+/*  OD                                                                        */
+/******************************************************************************/
+RPIM_EcuMode_t RPIM_GetEcmCurrentState(void)
+{
+    return(RPIM_EcmMode);
+}
+/******************************************************************************/
+/*Name : RPIM_GetTcmCurrentState                                              */
+/*Role : Returns the Current state of the TCM				      */
+/*Interface :                                                                 */
+/*Pre-condition : none                                                        */
+/*Constraints :                                                               */
+/*Behavior :                                                                  */
+/*  DO                                                                        */
+/*  OD                                                                        */
+/******************************************************************************/
+ubyte RPIM_GetTcmCurrentState(void)
+{
+	return((ubyte)RPIM_TcmMode.Mode);
+}
+/******************************************************************************/
+/*Name : RPIM_GetCanTransCurrentState                                         */
+/*Role : Returns the Current state of the can transmission		      */
+/*Interface : Return the Flag for CAN Transmission State                      */
+/*Pre-condition : none                                                        */
+/*Constraints :                                                               */
+/*Behavior :                                                                  */
+/*  DO                                                                        */
+/*  OD                                                                        */
+/******************************************************************************/
+ubyte RPIM_GetCanTransCurrentState(void)
+{
+    bool_t CanTransNormal;
+	CanTransNormal = TRUE;
+	if(RPIM_TcmMode.Mode == RPIM_DNC_MODE)
+	  return(RPIM_TcmMode.CanTransNormal);
+	else if(RPIM_EcmMode.Mode == RPIM_DNC_MODE)
+	  return(RPIM_TcmMode.CanTransNormal);
+	else
+	 return(CanTransNormal);
+}
+/******************************************************************************/
+/*Name : RPIM_GetCanTransCurrentState                                         */
+/*Role :Callback function for the Cur state of the CAN transmission for NETM  */
+/*Interface : return the state of the Can transmission                        */
+/*Pre-condition : none                                                        */
+/*Constraints :                                                               */
+/*Behavior :                                                                  */
+/*  DO                                                                        */
+/*    Return false if CanTramission Normal else return TRUE                   */
+/*  OD                                                                        */
+/******************************************************************************/
+ubyte RPIM_DisableDiagStatus(void)
+{
+        bool_t DisableDiagState;
+	DisableDiagState = FALSE;
+	if((bool_t)RPIM_GetCanTransCurrentState() == TRUE)
+		DisableDiagState = FALSE;
+	else if((bool_t)RPIM_GetCanTransCurrentState() == FALSE)
+                DisableDiagState = TRUE;
+	return ((ubyte)DisableDiagState);
+}
+/******************************************************************************/
+/*Name : RPIM_WakeUp                                                          */
+/*Role : Wake the the re-programing mode indication management module         */
+/*Interface : void                                                            */
+/*Pre-condition : none                                                        */
+/*Constraints : must be called one time after a system wake up                */
+/*Behavior :                                                                  */
+/*  DO                                                                        */
+/*    [start RPIM task]                                                       */
+/*  OD                                                                        */
+/******************************************************************************/
+void RPIM_WakeUp(void)
+{
+  SetRelAlarm (RPIM_Task_al, RPIM_DELAY, RPIM_PERIOD);
+  WKSS_TaskState(RPIM_Task_al, WKSS_ACTIVE_TASK);
+}
+
+/******************************************************************************/
+/*Name : RPIM_Sleep                                                           */
+/*Role : Put to sleep the re-programing mode indication management            */
+/*Interface : void                                                            */
+/*Pre-condition : none                                                        */
+/*Constraints : must be called one time after a system sleep                  */
+/*Behavior :                                                                  */
+/*  DO                                                                        */
+/*    [Stop RPIM Task]                                                        */
+/*  OD                                                                        */
+/******************************************************************************/
+void RPIM_Sleep (void)
+{
+  CancelAlarm(RPIM_Task_al);
+}
+/*______ P R I V A T E - F U N C T I O N S ___________________________________*/
+/*______ L O C A L - F U N C T I O N S _______________________________________*/
+/******************************************************************************/
+/* Name: Rpim_CheckEcmStatus                                                  */
+/* Role: Check for the re-programming mode of the Engine control module       */
+/* Interface: None                                                            */
+/* Pre-condition: Pre Processed Can message from the ECM                      */
+/* Constraints: None                                                          */
+/* Behavior:                                                                  */
+/*   DO                                                                       */
+/*    IF (Request to shift to the Programming mode) THEN   		      */
+/*       Start Counting the required Counts                                   */
+/*    IF (Entered into The Flash programming mode) THEN                       */
+/*         [Give an Alert on the LCD for the same in DSPM]		      */
+/*      IF (Progamming Succeded and Ignition off ) THEN                       */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*      IF ( Ignition Off ) THEN  					      */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*   OD                                                                       */
+/******************************************************************************/
+/*-----------------------------------------------------------------------------*/
+/*----------------------------DNC IMPLEMENTATION-------------------------------*/
+/*-----------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------*/
+static Return_data_t Rpim_CheckDncModeStatus(void)
+{
+    /*-----------------------------------------------------------------------------------------------------*/
+    DNC_RxStatus[AB_DIS_MSG] = NETC_GetDisableNormalComm_DiagAB_Status((NETC_DisableCommAB_t*)&ParamValue_DNC[AB_DIS_MSG]);
+    DNC_RxStatus[AUTOAC_DIS_MSG] = NETC_GetDisableNormalComm_DiagAutoAC_Status((NETC_DisableCommAutoAC_t*)&ParamValue_DNC[AUTOAC_DIS_MSG]);
+    DNC_RxStatus[BCM2_DIS_MSG] = NETC_GetDisableNormalComm_DiagBCM2_Status((NETC_DisableCommBCM2_t*)&ParamValue_DNC[BCM2_DIS_MSG]);
+    DNC_RxStatus[BCM_DIS_MSG] = NETC_GetDisableNormalComm_DiagBCM_Status((NETC_DisableCommBCM_t*)&ParamValue_DNC[BCM_DIS_MSG]);
+    DNC_RxStatus[ABS_DIS_MSG] = NETC_GetDisableNormalComm_DiagABS_ESP_Status((NETC_DisableCommABS_ESP_t*)&ParamValue_DNC[ABS_DIS_MSG]);
+    DNC_RxStatus[ECM_DIS_MSG] = NETC_GetDisableNormalComm_DiagECM_Status((NETC_DisableCommECM_t*)&ParamValue_DNC[ECM_DIS_MSG]);
+    DNC_RxStatus[EPS_DIS_MSG] = NETC_GetDisableNormalComm_DiagEPS_Status((NETC_DisableCommEPS_t*)&ParamValue_DNC[EPS_DIS_MSG]);
+    DNC_RxStatus[AUTOAC_GEN_DIS_MSG] = NETC_GetDisableNormalComm_AutoAC((NETC_DisableNormalComm_AutoAC_t*)&ParamValue_DNC[AUTOAC_GEN_DIS_MSG]);
+    DNC_RxStatus[BCM_GEN_DIS_MSG] = NETC_GetDisableNormalComm_Diag_BCMgeneral((NETC_DNC_DCD_BCMGeneral_t*)&ParamValue_DNC[BCM_GEN_DIS_MSG]);
+    DNC_RxStatus[BCM2_GEN_DIS_MSG] = NETC_GetDisableNormalComm_Diag_BCM2Gen((NETC_DisableNormalComm_Diag_BCM2Gen_t*)&ParamValue_DNC[BCM2_GEN_DIS_MSG]);
+    DNC_RxStatus[ECM_TM_GEN_DIS_MSG] = NETC_GetDisableNormalCommTMGeneral((NETC_DisableNormalCommTMGeneral_t*)&ParamValue_DNC[ECM_TM_GEN_DIS_MSG]);
+    DNC_RxStatus[ECM_ENG_GEN_DIS_MSG] = NETC_GetDisableNormaleCommEnginGeneral((NETC_DisableNormaleCommEnginGeneral_t*)&ParamValue_DNC[ECM_ENG_GEN_DIS_MSG]);
+    DNC_RxStatus[EPS_GEN_DIS_MSG] = NETC_GetDisableNormalComm_Diag_EPS((NETC_DisableNormalComm_EPS_t*)&ParamValue_DNC[EPS_GEN_DIS_MSG]);
+    /*---------------------------------------------------------------------------------------------------*/
+    DNC_RxStatus[ECU_4C0_DIS_MSG] = NETC_GetDisableNormalComm_4C0_Status(&ParamValue_DNC[ECU_4C0_DIS_MSG]);
+    DNC_RxStatus[ECU_4C1_DIS_MSG] = NETC_GetDisableNormalComm_4C1_Status(&ParamValue_DNC[ECU_4C1_DIS_MSG]);
+    DNC_RxStatus[ECU_4C2_DIS_MSG] = NETC_GetDisableNormalComm_4C2_Status(&ParamValue_DNC[ECU_4C2_DIS_MSG]);
+    DNC_RxStatus[ECU_4C3_DIS_MSG] = NETC_GetDisableNormalComm_4C3_Status(&ParamValue_DNC[ECU_4C3_DIS_MSG]);
+    DNC_RxStatus[ECU_4C4_DIS_MSG] = NETC_GetDisableNormalComm_4C4_Status(&ParamValue_DNC[ECU_4C4_DIS_MSG]);
+    DNC_RxStatus[ECU_4C5_DIS_MSG] = NETC_GetDisableNormalComm_4C5_Status(&ParamValue_DNC[ECU_4C5_DIS_MSG]);
+    DNC_RxStatus[ECU_4C6_DIS_MSG] = NETC_GetDisableNormalComm_4C6_Status(&ParamValue_DNC[ECU_4C6_DIS_MSG]);
+    DNC_RxStatus[ECU_4C7_DIS_MSG] = NETC_GetDisableNormalComm_4C7_Status(&ParamValue_DNC[ECU_4C7_DIS_MSG]);
+    DNC_RxStatus[ECU_4C8_DIS_MSG] = NETC_GetDisableNormalComm_4C8_Status(&ParamValue_DNC[ECU_4C8_DIS_MSG]);
+    DNC_RxStatus[ECU_4C9_DIS_MSG] = NETC_GetDisableNormalComm_4C9_Status(&ParamValue_DNC[ECU_4C9_DIS_MSG]);
+    DNC_RxStatus[ECU_4CA_DIS_MSG] = NETC_GetDisableNormalComm_4CA_Status(&ParamValue_DNC[ECU_4CA_DIS_MSG]);
+    DNC_RxStatus[ECU_4CB_DIS_MSG] = NETC_GetDisableNormalComm_4CB_Status(&ParamValue_DNC[ECU_4CB_DIS_MSG]);
+    DNC_RxStatus[ECU_4CC_DIS_MSG] = NETC_GetDisableNormalComm_4CC_Status(&ParamValue_DNC[ECU_4CC_DIS_MSG]);
+    DNC_RxStatus[ECU_4CD_DIS_MSG] = NETC_GetDisableNormalComm_4CD_Status(&ParamValue_DNC[ECU_4CD_DIS_MSG]);
+    DNC_RxStatus[ECU_4CE_DIS_MSG] = NETC_GetDisableNormalComm_4CE_Status(&ParamValue_DNC[ECU_4CE_DIS_MSG]);
+    DNC_RxStatus[ECU_4CF_DIS_MSG] = NETC_GetDisableNormalComm_4CF_Status(&ParamValue_DNC[ECU_4CF_DIS_MSG]);
+    /*---------------------------------------------------------------------------------------------------*/
+    DNC_RxStatus[ECU_4D0_DIS_MSG] = NETC_GetDisableNormalComm_4D0_Status(&ParamValue_DNC[ECU_4D0_DIS_MSG]);
+    DNC_RxStatus[ECU_4D1_DIS_MSG] = NETC_GetDisableNormalComm_4D1_Status(&ParamValue_DNC[ECU_4D1_DIS_MSG]);
+    DNC_RxStatus[ECU_4D2_DIS_MSG] = NETC_GetDisableNormalComm_4D2_Status(&ParamValue_DNC[ECU_4D2_DIS_MSG]);
+    DNC_RxStatus[ECU_4D3_DIS_MSG] = NETC_GetDisableNormalComm_4D3_Status(&ParamValue_DNC[ECU_4D3_DIS_MSG]);
+    DNC_RxStatus[ECU_4D4_DIS_MSG] = NETC_GetDisableNormalComm_4D4_Status(&ParamValue_DNC[ECU_4D4_DIS_MSG]);
+    DNC_RxStatus[ECU_4D5_DIS_MSG] = NETC_GetDisableNormalComm_4D5_Status(&ParamValue_DNC[ECU_4D5_DIS_MSG]);
+    DNC_RxStatus[ECU_4D6_DIS_MSG] = NETC_GetDisableNormalComm_4D6_Status(&ParamValue_DNC[ECU_4D6_DIS_MSG]);
+    DNC_RxStatus[ECU_4D7_DIS_MSG] = NETC_GetDisableNormalComm_4D7_Status(&ParamValue_DNC[ECU_4D7_DIS_MSG]);
+    DNC_RxStatus[ECU_4D8_DIS_MSG] = NETC_GetDisableNormalComm_4D8_Status(&ParamValue_DNC[ECU_4D8_DIS_MSG]);
+    DNC_RxStatus[ECU_4D9_DIS_MSG] = NETC_GetDisableNormalComm_4D9_Status(&ParamValue_DNC[ECU_4D9_DIS_MSG]);
+    DNC_RxStatus[ECU_4DA_DIS_MSG] = NETC_GetDisableNormalComm_4DA_Status(&ParamValue_DNC[ECU_4DA_DIS_MSG]);
+    DNC_RxStatus[ECU_4DB_DIS_MSG] = NETC_GetDisableNormalComm_4DB_Status(&ParamValue_DNC[ECU_4DB_DIS_MSG]);
+    DNC_RxStatus[ECU_4DC_DIS_MSG] = NETC_GetDisableNormalComm_4DC_Status(&ParamValue_DNC[ECU_4DC_DIS_MSG]);
+    DNC_RxStatus[ECU_4DD_DIS_MSG] = NETC_GetDisableNormalComm_4DD_Status(&ParamValue_DNC[ECU_4DD_DIS_MSG]);
+    DNC_RxStatus[ECU_4DE_DIS_MSG] = NETC_GetDisableNormalComm_4DE_Status(&ParamValue_DNC[ECU_4DE_DIS_MSG]);
+    DNC_RxStatus[ECU_4DF_DIS_MSG] = NETC_GetDisableNormalComm_4DF_Status(&ParamValue_DNC[ECU_4DF_DIS_MSG]);
+    /*---------------------------------------------------------------------------------------------------*/
+    DNC_RxStatus[ECU_4E2_DIS_MSG] = NETC_GetDisableNormalComm_4E2_Status(&ParamValue_DNC[ECU_4E2_DIS_MSG]);
+    DNC_RxStatus[ECU_4E3_DIS_MSG] = NETC_GetDisableNormalComm_4E3_Status(&ParamValue_DNC[ECU_4E3_DIS_MSG]);
+    DNC_RxStatus[ECU_4E9_DIS_MSG] = NETC_GetDisableNormalComm_4E9_Status(&ParamValue_DNC[ECU_4E9_DIS_MSG]);
+    DNC_RxStatus[ECU_4EA_DIS_MSG] = NETC_GetDisableNormalComm_4EA_Status(&ParamValue_DNC[ECU_4EA_DIS_MSG]);
+    DNC_RxStatus[ECU_4EB_DIS_MSG] = NETC_GetDisableNormalComm_4EB_Status(&ParamValue_DNC[ECU_4EB_DIS_MSG]);
+    DNC_RxStatus[ECU_4EC_DIS_MSG] = NETC_GetDisableNormalComm_4EC_Status(&ParamValue_DNC[ECU_4EC_DIS_MSG]);
+    DNC_RxStatus[ECU_4EE_DIS_MSG] = NETC_GetDisableNormalComm_4EE_Status(&ParamValue_DNC[ECU_4EE_DIS_MSG]);
+    DNC_RxStatus[ECU_4EF_DIS_MSG] = NETC_GetDisableNormalComm_4EF_Status(&ParamValue_DNC[ECU_4EF_DIS_MSG]);
+    /*---------------------------------------------------------------------------------------------------*/
+    RPIM_DiagDncMsgNode_t EcuMsg = NO_ECU_DIS_MSG;
+    /*------------------------------------------------------*/
+    for(EcuMsg = AB_DIS_MSG;EcuMsg<ECU_EOM_DIS_MSG;EcuMsg++)
+    {
+	if(NETC_RX_OK == DNC_RxStatus[EcuMsg])
+	{
+		Dnc_status_value[EcuMsg] = ParamValue_DNC[EcuMsg].DisableNormalComm;
+		Rpim_CheckMessage(EcuMsg,DNC_MODE);
+	}
+	Rpim_ReInitCount(EcuMsg,DNC_MODE);
+    }
+    /*------------------------------------------------------*/
+  return (Return_Dncdata);
+}
+/*-----------------------------------------------------------------------------*/
+/*----------------------------DNC IMPLEMENTATION-------------------------------*/
+/*-----------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------*/
+static RPIM_EcuMode_t Rpim_CheckDncStatus(void)
+{
+  Return_data_t ReturnInfo;
+  RPIM_DiagDncMsgNode_t EcuMsgCheck = NO_ECU_DIS_MSG;
+  ReturnInfo = Rpim_CheckDncModeStatus();
+  if(MMIM_SysCurrentState () == MMIM_BATT_IGN_NORMAL)
+   {
+     switch(ReturnInfo.Value)
+	 {
+	 case RPIM_PRE_STEP_INDENTIFIER://0x05
+	 	if(TRUE)
+		{
+			Rpim_DNCModeMsgCount = 0;
+		    	if(Rpim_DiagDncPreStepModeMsgCount<250)
+			{
+		       		Rpim_DiagDncPreStepModeMsgCount++;
+			}
+		    	if(Rpim_DiagDncPreStepModeMsgCount<Rpim_PRE_STEP_INITIAL_COUNTS)
+		     	{
+                		GenDncMode.Mode = RPIM_PRE_STEP;
+				ReturnSaveInfo.save_nodeA = ReturnInfo.save_nodeA;
+
+                        }
+		   	else
+		      	{
+			 	ReturnSaveInfo.save_nodeA = ReturnInfo.save_nodeA;
+			 	if(GenDncMode.Mode != RPIM_DNC_MODE)
+			 	{
+					Rpim_DiagDncPreSetModeOver = TRUE;
+			 	}
+		        }
+		}
+		else
+		{
+		    GenDncMode.CanTransNormal = TRUE;
+		    Rpim_DiagDncPreStepModeMsgCount = 0;
+		    Rpim_DNCModeMsgCount = 0;
+		    Rpim_DiagDncPreSetModeOver = FALSE;
+              	}
+	break;
+	case RPIM_FLASH_PROG_IDENTIFIER://0x0A
+        	if (ReturnInfo.save_nodeA == ReturnSaveInfo.save_nodeA)
+            	{
+	         	if(Rpim_DiagDncPreSetModeOver != FALSE)
+			{
+				Rpim_DiagDncPreStepModeMsgCount = 0;
+				if(Rpim_DNCModeMsgCount <= Rpim_DNC_STEP_INITIAL_COUNTS)
+				{
+			            Rpim_DNCModeMsgCount++;
+				}
+     				if(Rpim_DNCModeMsgCount > Rpim_DNC_STEP_INITIAL_COUNTS)
+				{
+				    GenDncMode.Mode = RPIM_DNC_MODE;
+				    ReturnSaveInfo.save_nodeB = ReturnInfo.save_nodeB;
+				    GenDncMode.CanTransNormal = FALSE;
+				    GenDncMode.ECU_Name = ReturnInfo.save_nodeB;
+				    Rpim_comm_flag = ReturnInfo.save_nodeB;
+				    RPIM_DncMsg = ReturnInfo.save_nodeB;
+				    /*---------------------------------*/
+                                    CheckDncStatus[RPIM_DncMsg] = TRUE;
+                                    RPIM_DNCmodeStatus = 1;
+				    /*---------------------------------*/
+				      if(ReturnInfo.save_nodeB <= ECM_ENG_GEN_DIS_MSG)
+				       {
+					      Dis_Comm_Dnc_flag |= (ulong)pow(2,(long double)RPIM_DncMsg);
+				       }
+				    /*---------------------------------------------------*/
+				    RPIM_Msg2 =  Rpim_FlagDisplayStatus(Dis_Comm_Dnc_flag);
+				    /*---------------------------------------------------*/
+				    Saved_Dis_Comm_Dnc_flag = Dis_Comm_Dnc_flag;
+				}
+		}
+		else
+		{
+		    Rpim_DiagDncPreStepModeMsgCount = 0;
+		    Rpim_DNCModeMsgCount = 0;
+		    Rpim_DiagDncPreSetModeOver = FALSE;
+		}
+	}
+	break;
+	default:
+	/*---------------------------------------------------*/
+	Dis_Comm_Dnc_flag &= ~ ((ulong)pow(2,(long double)Saved_RPIM_DncMsg));
+     	RPIM_Msg2 =  Rpim_FlagDisplayStatus(Dis_Comm_Dnc_flag);
+	/*---------------------------------------------------*/
+        if(RPIM_DNCmodeStatus !=0)
+        {
+
+	   CheckDncStatus[Saved_RPIM_DncMsg]  = 0;
+        	if(GenDncMode.Mode == RPIM_DNC_MODE)
+		{
+		    /*-------------------------------------*/
+		    /*-------------------------------------*/
+		    Rpim_DiagDncPreStepModeMsgCount = 0;
+		    Rpim_DNCModeMsgCount = 0;
+		    Rpim_DiagDncPreSetModeOver = FALSE;
+		}
+		else
+		{
+	            Rpim_DiagDncPreStepModeMsgCount = 0;
+	            Rpim_DNCModeMsgCount = 0;
+	            Rpim_DiagDncPreSetModeOver = FALSE;
+	  	}
+              /*------------------------------------------------------*/
+              for(EcuMsgCheck = AB_DIS_MSG;EcuMsgCheck<ECU_EOM_DIS_MSG;EcuMsgCheck++)
+              {
+                GenDncMode.CanTransNormal = TRUE;
+                RPIM_DNCmodeStatus = 0;
+                if(CheckDncStatus[EcuMsgCheck] != 0)
+                {
+                  GenDncMode.CanTransNormal = FALSE;
+                  RPIM_DNCmodeStatus = 1;
+                  break;
+                }
+              }
+         }
+	break;
+	}
+   }
+   else
+   {
+	GenDncMode.Mode = RPIM_NORMAL;
+	GenDncMode.CanTransNormal = TRUE;
+	Rpim_DiagDncPreStepModeMsgCount = 0;
+	Rpim_DNCModeMsgCount = 0;
+	Rpim_DiagDncPreSetModeOver = FALSE;
+        RPIM_DNCmodeStatus = 0;
+        Dis_Comm_Dnc_flag = 0;
+        memset(CheckDncStatus, 0, sizeof CheckDncStatus);
+   }
+return(GenDncMode);
+}
+
+/*-----------------------------------------------------------------------------*/
+/*----------------------------DNC IMPLEMENTATION ENDED-------------------------*/
+/*-----------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------*/
+
+/******************************************************************************/
+/* Name: Rpim_CheckEcmStatus                                                  */
+/* Role: Check for the re-programming mode of the Engine control module       */
+/* Interface: None                                                            */
+/* Pre-condition: Pre Processed Can message from the ECM                      */
+/* Constraints: None                                                          */
+/* Behavior:                                                                  */
+/*   DO                                                                       */
+/*    IF (Request to shift to the Programming mode) THEN   		      */
+/*       Start Counting the required Counts                                   */
+/*    IF (Entered into The Flash programming mode) THEN                       */
+/*         [Give an Alert on the LCD for the same in DSPM]		      */
+/*      IF (Progamming Succeded and Ignition off ) THEN                       */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*      IF ( Ignition Off ) THEN  					      */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*   OD                                                                       */
+/******************************************************************************/
+/*----------------------------DCD IMPLEMENTATION BEGIN-------------------------*/
+/*-----------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------*/
+static Return_data_t Rpim_CheckDcdModeStatus(void)
+{
+  /*-----------------------------------------------------------------------------------------------------*/
+  DCD_RxStatus[AB_DIS_MSG] = NETC_GetDisableNormalComm_DiagAB_Status((NETC_DisableCommAB_t*)&ParamValue_DCD[AB_DIS_MSG]);
+  DCD_RxStatus[AUTOAC_DIS_MSG] = NETC_GetDisableNormalComm_DiagAutoAC_Status((NETC_DisableCommAutoAC_t*)&ParamValue_DCD[AUTOAC_DIS_MSG]);
+  DCD_RxStatus[BCM2_DIS_MSG] = NETC_GetDisableNormalComm_DiagBCM2_Status((NETC_DisableCommBCM2_t*)&ParamValue_DCD[BCM2_DIS_MSG]);
+  DCD_RxStatus[BCM_DIS_MSG] = NETC_GetDisableNormalComm_DiagBCM_Status((NETC_DisableCommBCM_t*)&ParamValue_DCD[BCM_DIS_MSG]);
+  DCD_RxStatus[ABS_DIS_MSG] = NETC_GetDisableNormalComm_DiagABS_ESP_Status((NETC_DisableCommABS_ESP_t*)&ParamValue_DCD[ABS_DIS_MSG]);
+  DCD_RxStatus[ECM_DIS_MSG] = NETC_GetDisableNormalComm_DiagECM_Status((NETC_DisableCommECM_t*)&ParamValue_DCD[ECM_DIS_MSG]);
+  DCD_RxStatus[EPS_DIS_MSG] = NETC_GetDisableNormalComm_DiagEPS_Status((NETC_DisableCommEPS_t*)&ParamValue_DCD[EPS_DIS_MSG]);
+  DCD_RxStatus[AUTOAC_GEN_DIS_MSG] = NETC_GetDisableNormalComm_AutoAC((NETC_DisableNormalComm_AutoAC_t*)&ParamValue_DCD[AUTOAC_GEN_DIS_MSG]);
+  DCD_RxStatus[BCM_GEN_DIS_MSG] = NETC_GetDisableNormalComm_Diag_BCMgeneral((NETC_DNC_DCD_BCMGeneral_t*)&ParamValue_DCD[BCM_GEN_DIS_MSG]);
+  DCD_RxStatus[BCM2_GEN_DIS_MSG] = NETC_GetDisableNormalComm_Diag_BCM2Gen((NETC_DisableNormalComm_Diag_BCM2Gen_t*)&ParamValue_DCD[BCM2_GEN_DIS_MSG]);
+  DCD_RxStatus[ECM_TM_GEN_DIS_MSG] = NETC_GetDisableNormalCommTMGeneral((NETC_DisableNormalCommTMGeneral_t*)&ParamValue_DCD[ECM_TM_GEN_DIS_MSG]);
+  DCD_RxStatus[ECM_ENG_GEN_DIS_MSG] = NETC_GetDisableNormaleCommEnginGeneral((NETC_DisableNormaleCommEnginGeneral_t*)&ParamValue_DCD[ECM_ENG_GEN_DIS_MSG]);
+  DCD_RxStatus[EPS_GEN_DIS_MSG] = NETC_GetDisableNormalComm_Diag_EPS((NETC_DisableNormalComm_EPS_t*)&ParamValue_DCD[EPS_GEN_DIS_MSG]);
+  /*---------------------------------------------------------------------------------------------------*/
+  DCD_RxStatus[ECU_4C0_DIS_MSG] = NETC_GetDisableNormalComm_4C0_Status(&ParamValue_DCD[ECU_4C0_DIS_MSG]);
+  DCD_RxStatus[ECU_4C1_DIS_MSG] = NETC_GetDisableNormalComm_4C1_Status(&ParamValue_DCD[ECU_4C1_DIS_MSG]);
+  DCD_RxStatus[ECU_4C2_DIS_MSG] = NETC_GetDisableNormalComm_4C2_Status(&ParamValue_DCD[ECU_4C2_DIS_MSG]);
+  DCD_RxStatus[ECU_4C3_DIS_MSG] = NETC_GetDisableNormalComm_4C3_Status(&ParamValue_DCD[ECU_4C3_DIS_MSG]);
+  DCD_RxStatus[ECU_4C4_DIS_MSG] = NETC_GetDisableNormalComm_4C4_Status(&ParamValue_DCD[ECU_4C4_DIS_MSG]);
+  DCD_RxStatus[ECU_4C5_DIS_MSG] = NETC_GetDisableNormalComm_4C5_Status(&ParamValue_DCD[ECU_4C5_DIS_MSG]);
+  DCD_RxStatus[ECU_4C6_DIS_MSG] = NETC_GetDisableNormalComm_4C6_Status(&ParamValue_DCD[ECU_4C6_DIS_MSG]);
+  DCD_RxStatus[ECU_4C7_DIS_MSG] = NETC_GetDisableNormalComm_4C7_Status(&ParamValue_DCD[ECU_4C7_DIS_MSG]);
+  DCD_RxStatus[ECU_4C8_DIS_MSG] = NETC_GetDisableNormalComm_4C8_Status(&ParamValue_DCD[ECU_4C8_DIS_MSG]);
+  DCD_RxStatus[ECU_4C9_DIS_MSG] = NETC_GetDisableNormalComm_4C9_Status(&ParamValue_DCD[ECU_4C9_DIS_MSG]);
+  DCD_RxStatus[ECU_4CA_DIS_MSG] = NETC_GetDisableNormalComm_4CA_Status(&ParamValue_DCD[ECU_4CA_DIS_MSG]);
+  DCD_RxStatus[ECU_4CB_DIS_MSG] = NETC_GetDisableNormalComm_4CB_Status(&ParamValue_DCD[ECU_4CB_DIS_MSG]);
+  DCD_RxStatus[ECU_4CC_DIS_MSG] = NETC_GetDisableNormalComm_4CC_Status(&ParamValue_DCD[ECU_4CC_DIS_MSG]);
+  DCD_RxStatus[ECU_4CD_DIS_MSG] = NETC_GetDisableNormalComm_4CD_Status(&ParamValue_DCD[ECU_4CD_DIS_MSG]);
+  DCD_RxStatus[ECU_4CE_DIS_MSG] = NETC_GetDisableNormalComm_4CE_Status(&ParamValue_DCD[ECU_4CE_DIS_MSG]);
+  DCD_RxStatus[ECU_4CF_DIS_MSG] = NETC_GetDisableNormalComm_4CF_Status(&ParamValue_DCD[ECU_4CF_DIS_MSG]);
+  /*---------------------------------------------------------------------------------------------------*/
+  DCD_RxStatus[ECU_4D0_DIS_MSG] = NETC_GetDisableNormalComm_4D0_Status(&ParamValue_DCD[ECU_4D0_DIS_MSG]);
+  DCD_RxStatus[ECU_4D1_DIS_MSG] = NETC_GetDisableNormalComm_4D1_Status(&ParamValue_DCD[ECU_4D1_DIS_MSG]);
+  DCD_RxStatus[ECU_4D2_DIS_MSG] = NETC_GetDisableNormalComm_4D2_Status(&ParamValue_DCD[ECU_4D2_DIS_MSG]);
+  DCD_RxStatus[ECU_4D3_DIS_MSG] = NETC_GetDisableNormalComm_4D3_Status(&ParamValue_DCD[ECU_4D3_DIS_MSG]);
+  DCD_RxStatus[ECU_4D4_DIS_MSG] = NETC_GetDisableNormalComm_4D4_Status(&ParamValue_DCD[ECU_4D4_DIS_MSG]);
+  DCD_RxStatus[ECU_4D5_DIS_MSG] = NETC_GetDisableNormalComm_4D5_Status(&ParamValue_DCD[ECU_4D5_DIS_MSG]);
+  DCD_RxStatus[ECU_4D6_DIS_MSG] = NETC_GetDisableNormalComm_4D6_Status(&ParamValue_DCD[ECU_4D6_DIS_MSG]);
+  DCD_RxStatus[ECU_4D7_DIS_MSG] = NETC_GetDisableNormalComm_4D7_Status(&ParamValue_DCD[ECU_4D7_DIS_MSG]);
+  DCD_RxStatus[ECU_4D8_DIS_MSG] = NETC_GetDisableNormalComm_4D8_Status(&ParamValue_DCD[ECU_4D8_DIS_MSG]);
+  DCD_RxStatus[ECU_4D9_DIS_MSG] = NETC_GetDisableNormalComm_4D9_Status(&ParamValue_DCD[ECU_4D9_DIS_MSG]);
+  DCD_RxStatus[ECU_4DA_DIS_MSG] = NETC_GetDisableNormalComm_4DA_Status(&ParamValue_DCD[ECU_4DA_DIS_MSG]);
+  DCD_RxStatus[ECU_4DB_DIS_MSG] = NETC_GetDisableNormalComm_4DB_Status(&ParamValue_DCD[ECU_4DB_DIS_MSG]);
+  DCD_RxStatus[ECU_4DC_DIS_MSG] = NETC_GetDisableNormalComm_4DC_Status(&ParamValue_DCD[ECU_4DC_DIS_MSG]);
+  DCD_RxStatus[ECU_4DD_DIS_MSG] = NETC_GetDisableNormalComm_4DD_Status(&ParamValue_DCD[ECU_4DD_DIS_MSG]);
+  DCD_RxStatus[ECU_4DE_DIS_MSG] = NETC_GetDisableNormalComm_4DE_Status(&ParamValue_DCD[ECU_4DE_DIS_MSG]);
+  DCD_RxStatus[ECU_4DF_DIS_MSG] = NETC_GetDisableNormalComm_4DF_Status(&ParamValue_DCD[ECU_4DF_DIS_MSG]);
+  /*---------------------------------------------------------------------------------------------------*/
+  DCD_RxStatus[ECU_4E2_DIS_MSG] = NETC_GetDisableNormalComm_4E2_Status(&ParamValue_DCD[ECU_4E2_DIS_MSG]);
+  DCD_RxStatus[ECU_4E3_DIS_MSG] = NETC_GetDisableNormalComm_4E3_Status(&ParamValue_DCD[ECU_4E3_DIS_MSG]);
+  DCD_RxStatus[ECU_4E9_DIS_MSG] = NETC_GetDisableNormalComm_4E9_Status(&ParamValue_DCD[ECU_4E9_DIS_MSG]);
+  DCD_RxStatus[ECU_4EA_DIS_MSG] = NETC_GetDisableNormalComm_4EA_Status(&ParamValue_DCD[ECU_4EA_DIS_MSG]);
+  DCD_RxStatus[ECU_4EB_DIS_MSG] = NETC_GetDisableNormalComm_4EB_Status(&ParamValue_DCD[ECU_4EB_DIS_MSG]);
+  DCD_RxStatus[ECU_4EC_DIS_MSG] = NETC_GetDisableNormalComm_4EC_Status(&ParamValue_DCD[ECU_4EC_DIS_MSG]);
+  DCD_RxStatus[ECU_4EE_DIS_MSG] = NETC_GetDisableNormalComm_4EE_Status(&ParamValue_DCD[ECU_4EE_DIS_MSG]);
+  DCD_RxStatus[ECU_4EF_DIS_MSG] = NETC_GetDisableNormalComm_4EF_Status(&ParamValue_DCD[ECU_4EF_DIS_MSG]);
+  /*---------------------------------------------------------------------------------------------------*/
+    RPIM_DiagDncMsgNode_t EcuMsg = NO_ECU_DIS_MSG;
+    for(EcuMsg = AB_DIS_MSG;EcuMsg<ECU_EOM_DIS_MSG;EcuMsg++)
+    {
+	  if(NETC_RX_OK == DCD_RxStatus[EcuMsg])
+	  {
+	      Dcd_status_value[EcuMsg] = ParamValue_DCD[EcuMsg].DisableCommDiag;
+	      Rpim_CheckMessage(EcuMsg,DCD_MODE);
+	  }
+       	  Rpim_ReInitCount(EcuMsg,DCD_MODE);
+    }
+return (Return_Dcddata);
+}
+/*-----------------------------------------------------------------------------*/
+/*----------------------------DCD IMPLEMENTATION-------------------------------*/
+/*-----------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------*/
+
+/*-----------------------------------------------------------------------------*/
+/*----------------------------DCD IMPLEMENTATION-------------------------------*/
+/*-----------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------*/
+
+static RPIM_EcuMode_t Rpim_CheckDiagStatus(void)
+{
+  RPIM_DiagDncMsgNode_t EcuDcdMsgCheck = NO_ECU_DIS_MSG;
+  Return_data_t DiagInfo;
+  DiagInfo = Rpim_CheckDcdModeStatus();
+  if(MMIM_SysCurrentState () == MMIM_BATT_IGN_NORMAL)
+   {
+     switch(DiagInfo.Value)
+	 {
+	   case RPIM_PRE_STEP_INDENTIFIER://0x05
+           if(TRUE)
+            {
+                Rpim_DiagDisNormCommModeMsgCount = 0;
+                if(Rpim_DiagPreStepModeMsgCount<250)
+                {
+                    Rpim_DiagPreStepModeMsgCount++;
+                }
+                if(Rpim_DiagPreStepModeMsgCount<Rpim_PRE_STEP_INITIAL_COUNTS)
+                {
+                    GenDiagDncMode.Mode = RPIM_PRE_STEP;
+                    SavedDiagInfo.save_nodeA = DiagInfo.save_nodeA;
+                }
+		else
+                {
+                  SavedDiagInfo.save_nodeA = DiagInfo.save_nodeA;
+                  if(GenDiagDncMode.Mode != RPIM_DCD_MODE)
+                      {
+                          Rpim_DiagPreSetModeOver = TRUE;
+                      }
+		}
+	    }
+            else
+            {
+                GenDiagDncMode.CanTransNormal = TRUE;
+                Rpim_DiagPreStepModeMsgCount = 0;
+                Rpim_DiagDisNormCommModeMsgCount = 0;
+                Rpim_DiagPreSetModeOver = FALSE;
+             }
+	break;
+        case RPIM_FLASH_PROG_IDENTIFIER://0x0A
+        if (DiagInfo.save_nodeA == SavedDiagInfo.save_nodeA)
+        {
+            if(Rpim_DiagPreSetModeOver != FALSE)
+            {
+                Rpim_DiagPreStepModeMsgCount = 0;
+                if(Rpim_DiagDisNormCommModeMsgCount<=Rpim_DNC_STEP_INITIAL_COUNTS)
+                {
+                    Rpim_DiagDisNormCommModeMsgCount++;
+                }
+                if(Rpim_DiagDisNormCommModeMsgCount>Rpim_DNC_STEP_INITIAL_COUNTS)
+                {
+                    GenDiagDncMode.Mode = RPIM_DCD_MODE;
+		    GenDiagDncMode.Mode = RPIM_DCD_MODE;
+                    SavedDiagInfo.save_nodeB = DiagInfo.save_nodeB;
+		    RPIM_DiagMsg = DiagInfo.save_nodeB;
+                    GenDiagDncMode.CanTransNormal = FALSE;
+                    DCDStatusCAN = 1;
+		    /*-----------------------------------------------------------*/
+                    CheckDiagStatus[RPIM_DiagMsg] = TRUE;
+                    /*-----------------------------------------------------------*/
+		    if(DiagInfo.save_nodeB <= ECM_ENG_GEN_DIS_MSG)
+		    {
+			Dis_Comm_Diag_flag |= (ulong)pow(2,(long double)RPIM_DiagMsg);
+		    }
+		    RPIM_Msg1 = Rpim_FlagDisplayStatus(Dis_Comm_Diag_flag);
+
+                    Saved_Dis_Comm_Diag_flag = Dis_Comm_Diag_flag;
+             	}
+	  }
+	 else
+	  {
+	      Rpim_DiagPreStepModeMsgCount = 0;
+	      Rpim_DiagDisNormCommModeMsgCount = 0;
+	      Rpim_DiagPreSetModeOver = FALSE;
+	  }
+    	}
+    	break;
+	default:
+	  Dis_Comm_Diag_flag &= ~((ulong)pow(2,(long double)Saved_RPIM_DiagMsg));
+	  RPIM_Msg1 = Rpim_FlagDisplayStatus(Dis_Comm_Diag_flag);
+
+        if(DCDStatusCAN != 0)
+        {
+                CheckDiagStatus[Saved_RPIM_DiagMsg] = FALSE;
+
+        	if(GenDiagDncMode.Mode == RPIM_DCD_MODE)
+		{
+		    Rpim_DiagPreStepModeMsgCount = 0;
+		    Rpim_DiagDisNormCommModeMsgCount = 0;
+		    Rpim_DiagPreSetModeOver = FALSE;
+		}
+		else
+		{
+	            Rpim_DiagPreStepModeMsgCount = 0;
+	            Rpim_DiagDisNormCommModeMsgCount = 0;
+	            Rpim_DiagPreSetModeOver = FALSE;
+                }
+              for(EcuDcdMsgCheck = AB_DIS_MSG;EcuDcdMsgCheck<ECU_EOM_DIS_MSG;EcuDcdMsgCheck++)
+              {
+                DCDStatusCAN = 0;
+                if(CheckDiagStatus[EcuDcdMsgCheck] != 0)
+                {
+                  DCDStatusCAN = 1;
+                  break;
+                }
+              }
+         }
+        break;
+         }
+   }
+  else
+   {
+      GenDiagDncMode.Mode = RPIM_NORMAL;
+      DCDStatusCAN = 0;
+     // SavedDiagInfo.save_nodeB = 0;
+      GenDiagDncMode.CanTransNormal = TRUE;
+      Rpim_DiagPreStepModeMsgCount = 0;
+      Rpim_DiagDisNormCommModeMsgCount = 0;
+      Rpim_DiagPreSetModeOver = FALSE;
+      memset(CheckDiagStatus, 0 , sizeof CheckDiagStatus);
+      Dis_Comm_Diag_flag = 0;
+   }
+   return(GenDiagDncMode);
+}
+/*************************************#****************************************/
+/*************************************#****************************************/
+/*************************************#****************************************/
+/*************************************#****************************************/
+
+
+/******************************************************************************/
+/* Name: Rpim_CheckEcmStatus                                                  */
+/* Role: Check for the re-programming mode of the Engine control module       */
+/* Interface: None                                                            */
+/* Pre-condition: Pre Processed Can message from the ECM                      */
+/* Constraints: None                                                          */
+/* Behavior:                                                                  */
+/*   DO                                                                       */
+/*    IF (Request to shift to the Programming mode) THEN   		      */
+/*       Start Counting the required Counts                                   */
+/*    IF (Entered into The Flash programming mode) THEN                       */
+/*         [Give an Alert on the LCD for the same in DSPM]		      */
+/*      IF (Progamming Succeded and Ignition off ) THEN                       */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*      IF ( Ignition Off ) THEN  					      */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*   OD                                                                       */
+/******************************************************************************/
+static RPIM_EcuMode_t Rpim_CheckEcmStatus(void)
+{
+  static RPIM_EcuMode_t GenEcmMode;
+  if(MMIM_SysCurrentState () == MMIM_BATT_IGN_NORMAL)
+   {
+     switch(RPIM_EcmDisNormComm.Value)
+	 {
+	   case RPIM_PRE_STEP_INDENTIFIER://0x05
+	         if((RPIM_EcmDisNormComm.NewFrame != FALSE)
+			    &&
+				 (RPIM_EcmDisNormComm.Status != RPIP_DNC_VAL_INVALID))
+			    {
+                                  if(GenEcmMode.Mode != RPIM_DNC_MODE)
+				  {
+		                    Rpim_EcmDisNormCommModeMsgCount = 0;
+				  }
+				  if(Rpim_EcmPreStepModeMsgCount<250)
+				     Rpim_EcmPreStepModeMsgCount++;
+				  if(Rpim_EcmPreStepModeMsgCount<Rpim_PRE_STEP_INITIAL_COUNTS)
+				   {
+                                     if(GenEcmMode.Mode != RPIM_DNC_MODE)
+				     {
+				       GenEcmMode.Mode = RPIM_PRE_STEP;
+	                               GenEcmMode.CanTransNormal = TRUE;
+				     }
+				   }
+			         else
+				    {
+				      if(GenEcmMode.Mode != RPIM_DNC_MODE)
+				      {
+                                        GenEcmMode.Mode = RPIM_PRE_STEP;
+	                                GenEcmMode.CanTransNormal = TRUE;
+                                        Rpim_EcmPreSetModeOver = TRUE;
+				      }
+				    }
+				}
+			  else
+			  {
+                    //GenEcmMode.Mode = RPIM_NORMAL;
+	            GenEcmMode.CanTransNormal = TRUE;
+	            Rpim_EcmPreStepModeMsgCount = 0;
+	            Rpim_EcmDisNormCommModeMsgCount = 0;
+	            Rpim_EcmPreSetModeOver = FALSE;
+              }
+			  break;
+	   case RPIM_FLASH_PROG_IDENTIFIER://0x0A
+
+	          if((RPIM_EcmDisNormComm.NewFrame != FALSE)
+			    &&
+				 (RPIM_EcmDisNormComm.Status != RPIP_DNC_VAL_INVALID)
+				 &&
+				 (Rpim_EcmPreSetModeOver != FALSE))
+			     {
+			      Rpim_EcmPreStepModeMsgCount = 0;
+
+				   if(Rpim_EcmDisNormCommModeMsgCount<=Rpim_DNC_STEP_INITIAL_COUNTS)
+				     Rpim_EcmDisNormCommModeMsgCount++;
+     				  if(Rpim_EcmDisNormCommModeMsgCount>Rpim_DNC_STEP_INITIAL_COUNTS)
+				  //if((++Rpim_EcmDisNormCommModeMsgCount>Rpim_DNC_STEP_INITIAL_COUNTS)
+				   {
+				     GenEcmMode.Mode = RPIM_DNC_MODE;
+	                             GenEcmMode.CanTransNormal = FALSE;
+				   }
+				  else
+				  {
+				    GenEcmMode.Mode = RPIM_PRE_STEP;
+	                            GenEcmMode.CanTransNormal = TRUE;
+                    //Rpim_EcmPreSetModeOver = TRUE;
+				  }
+			   }
+			  else
+			  {
+                    GenEcmMode.Mode = RPIM_NORMAL;
+	            GenEcmMode.CanTransNormal = TRUE;
+	            Rpim_EcmPreStepModeMsgCount = 0;
+	            Rpim_EcmDisNormCommModeMsgCount = 0;
+	            Rpim_EcmPreSetModeOver = FALSE;
+                  }
+
+			  break;
+	   default:
+
+             if((RPIM_EcmDisNormComm.NewFrame != FALSE)
+			    &&
+		(RPIM_EcmDisNormComm.Status != RPIP_DNC_VAL_INVALID))
+			    {
+                                  Rpim_EcmPreStepModeMsgCount = 0;
+				  Rpim_EcmDisNormCommModeMsgCount = 0;
+				  Rpim_EcmPreSetModeOver = FALSE;
+				  GenEcmMode.Mode = RPIM_NORMAL;
+                                  GenEcmMode.CanTransNormal = TRUE;
+			   }
+				else
+		{
+                    GenEcmMode.Mode = RPIM_NORMAL;
+	            GenEcmMode.CanTransNormal = TRUE;
+	            Rpim_EcmPreStepModeMsgCount = 0;
+	            Rpim_EcmDisNormCommModeMsgCount = 0;
+	            Rpim_EcmPreSetModeOver = FALSE;
+                }
+	            break;
+
+   }
+   }
+  else
+   {
+          GenEcmMode.Mode = RPIM_NORMAL;
+	  GenEcmMode.CanTransNormal = TRUE;
+	  Rpim_EcmPreStepModeMsgCount = 0;
+	  Rpim_EcmDisNormCommModeMsgCount = 0;
+	  Rpim_EcmPreSetModeOver = FALSE;
+   }
+   return(GenEcmMode);
+}
+
+#ifdef RPIP_TRANSMISSION_CONTROL_MODULE
+
+/******************************************************************************/
+/* Name: Rpim_CheckTcmStatus                                                  */
+/* Role: Check for the re-programming mode of the Transmission control module */
+/* Interface: None                                                            */
+/* Pre-condition: Pre Processed Can message from the TCM                      */
+/* Constraints: None                                                          */
+/* Behavior:                                                                  */
+/*   DO                                                                       */
+/*    IF (Request to shift to the Programming mode) THEN   	              */
+/*       Start Counting the required Counts                                   */
+/*    IF (Entered into The Flash programming mode) THEN                       */
+/*         [Give an Alert on the LCD for the same in DSPM ]		      */
+/*      IF (Progamming Succeded and Ignition off ) THEN                       */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*      IF ( Ignition Off ) THEN  					      */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*   OD                                                                       */
+/******************************************************************************/
+static RPIM_EcuMode_t Rpim_CheckTcmStatus(void)
+{
+  static RPIM_EcuMode_t GenTcmMode;
+  if(MMIM_SysCurrentState () == MMIM_BATT_IGN_NORMAL)
+   {
+     switch(RPIM_TcmDisNormComm.Value)
+	 {
+	   case RPIM_PRE_STEP_INDENTIFIER://0x05
+	         if((RPIM_TcmDisNormComm.NewFrame != FALSE)
+			    &&
+				 (RPIM_TcmDisNormComm.Status != RPIP_DNC_VAL_INVALID))
+			    {
+		               if(GenTcmMode.Mode != RPIM_DNC_MODE)
+				  {
+			            Rpim_TcmDisNormCommModeMsgCount = 0;
+			          }
+			       if(Rpim_TcmPreStepModeMsgCount<250)
+				  Rpim_TcmPreStepModeMsgCount++;
+				  if(Rpim_TcmPreStepModeMsgCount<Rpim_PRE_STEP_INITIAL_COUNTS)
+				   {
+                                     if(GenTcmMode.Mode != RPIM_DNC_MODE)
+				     {
+				      GenTcmMode.Mode = RPIM_PRE_STEP;
+	                              GenTcmMode.CanTransNormal = TRUE;
+				     }
+				   }
+			      else
+				    {
+				        if(GenTcmMode.Mode != RPIM_DNC_MODE)
+				        {
+                                         GenTcmMode.Mode = RPIM_PRE_STEP;
+	                                 GenTcmMode.CanTransNormal = TRUE;
+                                         Rpim_TcmPreSetModeOver = TRUE;
+					}
+				   }
+				}
+			  else
+			  {
+                GenTcmMode.Mode = RPIM_NORMAL;
+	            GenTcmMode.CanTransNormal = TRUE;
+	            Rpim_TcmPreStepModeMsgCount = 0;
+	            Rpim_TcmDisNormCommModeMsgCount = 0;
+	            Rpim_TcmPreSetModeOver = FALSE;
+              }
+			  break;
+	   case RPIM_FLASH_PROG_IDENTIFIER://0x0A
+	          if((RPIM_TcmDisNormComm.NewFrame != FALSE)
+			    &&
+				 (RPIM_TcmDisNormComm.Status != RPIP_DNC_VAL_INVALID)
+				 &&
+				 (Rpim_TcmPreSetModeOver != FALSE))
+			     {
+                                   Rpim_TcmPreStepModeMsgCount = 0;
+				   if(Rpim_TcmDisNormCommModeMsgCount<=Rpim_DNC_STEP_INITIAL_COUNTS)
+				     Rpim_TcmDisNormCommModeMsgCount++;
+     				  if(Rpim_TcmDisNormCommModeMsgCount>Rpim_DNC_STEP_INITIAL_COUNTS)
+				   {
+				     GenTcmMode.Mode = RPIM_DNC_MODE;
+	                            GenTcmMode.CanTransNormal = FALSE;
+				   }
+				  else
+				  {
+				    GenTcmMode.Mode = RPIM_PRE_STEP;
+	                GenTcmMode.CanTransNormal = TRUE;
+                    //Rpim_TcmPreSetModeOver = TRUE;
+				  }
+			   }
+			  else
+			  {
+                GenTcmMode.Mode = RPIM_NORMAL;
+	            GenTcmMode.CanTransNormal = TRUE;
+	            Rpim_TcmPreStepModeMsgCount = 0;
+	            Rpim_TcmDisNormCommModeMsgCount = 0;
+	            Rpim_TcmPreSetModeOver = FALSE;
+              }
+			  break;
+	   default: if((RPIM_TcmDisNormComm.NewFrame != FALSE)
+			    &&
+				 (RPIM_TcmDisNormComm.Status != RPIP_DNC_VAL_INVALID))
+			    {
+	              	          Rpim_TcmPreStepModeMsgCount = 0;
+				  Rpim_TcmDisNormCommModeMsgCount = 0;
+				  Rpim_TcmPreSetModeOver = FALSE;
+				  GenTcmMode.Mode = RPIM_NORMAL;
+	                          GenTcmMode.CanTransNormal = TRUE;
+			     }
+				else
+			    {
+                    GenTcmMode.Mode = RPIM_NORMAL;
+	            GenTcmMode.CanTransNormal = TRUE;
+	            Rpim_TcmPreStepModeMsgCount = 0;
+	            Rpim_TcmDisNormCommModeMsgCount = 0;
+	            Rpim_TcmPreSetModeOver = FALSE;
+                }
+	            break;
+	  }
+   }
+   else
+   {
+          GenTcmMode.Mode = RPIM_NORMAL;
+	  GenTcmMode.CanTransNormal = TRUE;
+	  Rpim_TcmPreStepModeMsgCount = 0;
+	  Rpim_TcmDisNormCommModeMsgCount = 0;
+	  Rpim_TcmPreSetModeOver = FALSE;
+   }
+
+   return(GenTcmMode);
+}
+
+#endif /*RPIP_TRANSMISSION_CONTROL_MODULE*/
+bool_t RPIM_GetDNCStatus()
+{
+  return(RPIM_EcmMode.CanTransNormal);
+}
+
+ubyte CheckDisableNormalComm()
+{
+  NETC_RxStatus_t DNC_AB_RxStatus;
+  NETC_RxStatus_t DNC_AutoAC_RxStatus;
+  NETC_RxStatus_t DNC_BCM2_RxStatus;
+  NETC_RxStatus_t DNC_BCM_RxStatus;
+  NETC_RxStatus_t DNC_ABS_ESP_RxStatus;
+  NETC_RxStatus_t DNC_ECM_RxStatus;
+  NETC_RxStatus_t DNC_EPS_RxStatus;
+  NETC_RxStatus_t AutoAC_RxStatus;
+  NETC_RxStatus_t EPS_Indi_RxStatus;
+  NETC_RxStatus_t BCM2_Gen_RxStatus;
+  NETC_RxStatus_t BCM_Gen_RxStatus;
+  NETC_RxStatus_t Engine_Gen_RxStatus;
+  NETC_RxStatus_t TM_Gen_RxStatus;
+
+  NETC_DisableCommAB_t ParamValue_DNC_AB;
+  NETC_DisableCommAutoAC_t ParamValue_DNC_AutoAC;
+  NETC_DisableCommBCM2_t ParamValue_DNC_BCM2;
+  NETC_DisableCommBCM_t ParamValue_DNC_BCM;
+  NETC_DisableCommABS_ESP_t ParamValue_DNC_ABS_ESP;
+  NETC_DisableCommECM_t ParamValue_DNC_ECM;
+  NETC_DisableCommEPS_t ParamValue_DNC_EPS;
+  NETC_DisableNormalComm_AutoAC_t ParamValue_AutoAC;
+  NETC_DNC_DCD_BCMGeneral_t ParamValue_BCMGen;
+  NETC_DisableNormalComm_Diag_BCM2Gen_t ParamValue_BCM2Gen;
+  NETC_DisableNormalCommTMGeneral_t ParamValue_TMGen;
+  NETC_DisableNormalComm_EPS_t ParamValue_EPS_Indi;
+  NETC_DisableNormaleCommEnginGeneral_t ParamValue_EngGen;
+
+  DNC_AB_RxStatus = NETC_GetDisableNormalComm_DiagAB_Status(&ParamValue_DNC_AB);
+  DNC_AutoAC_RxStatus = NETC_GetDisableNormalComm_DiagAutoAC_Status(&ParamValue_DNC_AutoAC);
+  DNC_BCM2_RxStatus = NETC_GetDisableNormalComm_DiagBCM2_Status(&ParamValue_DNC_BCM2);
+  DNC_BCM_RxStatus = NETC_GetDisableNormalComm_DiagBCM_Status(&ParamValue_DNC_BCM);
+  DNC_ABS_ESP_RxStatus = NETC_GetDisableNormalComm_DiagABS_ESP_Status(&ParamValue_DNC_ABS_ESP);
+  DNC_ECM_RxStatus = NETC_GetDisableNormalComm_DiagECM_Status(&ParamValue_DNC_ECM);
+  DNC_EPS_RxStatus = NETC_GetDisableNormalComm_DiagEPS_Status(&ParamValue_DNC_EPS);
+  AutoAC_RxStatus = NETC_GetDisableNormalComm_AutoAC(&ParamValue_AutoAC);
+  BCM_Gen_RxStatus = NETC_GetDisableNormalComm_Diag_BCMgeneral(&ParamValue_BCMGen);
+  BCM2_Gen_RxStatus = NETC_GetDisableNormalComm_Diag_BCM2Gen(&ParamValue_BCM2Gen);
+  TM_Gen_RxStatus = NETC_GetDisableNormalCommTMGeneral(&ParamValue_TMGen);
+  Engine_Gen_RxStatus = NETC_GetDisableNormaleCommEnginGeneral(&ParamValue_EngGen);
+  EPS_Indi_RxStatus = NETC_GetDisableNormalComm_Diag_EPS(&ParamValue_EPS_Indi);
+
+  /*if( NETC_RxStatus_t*/
+  return(0);
+
+}
+static void Rpim_CheckMessage(RPIM_DiagDncMsgNode_t MsgId, RPIM_Mode_Status_t curr_mode)
+{
+    if(curr_mode == DNC_MODE)
+    {
+	if (((Dnc_status_value[MsgId] == RPIM_PRE_STEP_INDENTIFIER ) || (Dnc_status_value[MsgId]  == RPIM_FLASH_PROG_IDENTIFIER ))
+            && ((SignalInProgress == FALSE) || (Pass_Flag == MsgId)))
+	{
+	    if((Dnc_status_value[MsgId] == RPIM_PRE_STEP_INDENTIFIER )&& (count1[MsgId] <2))
+	    {
+		count1[MsgId]++;
+		Return_Dncdata.Value  = Dnc_status_value[MsgId];
+		if(count1[MsgId] == 2)
+		{
+		    SignalInProgress = TRUE;
+		    Pass_Flag = MsgId;
+		    Return_Dncdata.save_nodeA = MsgId;
+		}
+	    }
+	    else if((Dnc_status_value[MsgId] == RPIM_FLASH_PROG_IDENTIFIER ) && (count2[MsgId] < 2) && (count1[MsgId] == 2) )
+	    {
+		count2[MsgId]++;
+		Return_Dncdata.Value  = Dnc_status_value[MsgId];
+		SignalInProgress = TRUE;
+		if(count2[MsgId] == 2)
+		{
+		   Return_Dncdata.save_nodeB = MsgId;
+		}
+	    }
+	}
+	else if ((Dnc_status_value[MsgId] != RPIM_PRE_STEP_INDENTIFIER ) && (Dnc_status_value[MsgId] !=  RPIM_FLASH_PROG_IDENTIFIER ) && (dis_com_flag[MsgId]  == ON))
+	{
+	    Return_Dncdata.Value  = Dnc_status_value[MsgId];
+	    SignalInProgress = FALSE;
+	    dis_com_flag[MsgId] = OFF;
+	    Saved_Rpim_flag = MsgId;
+	    Saved_RPIM_Msg = MsgId;
+	    Saved_RPIM_DncMsg = MsgId;
+	}
+	else if ((Dnc_status_value[MsgId] != RPIM_PRE_STEP_INDENTIFIER ) && (Dnc_status_value[MsgId] !=  RPIM_FLASH_PROG_IDENTIFIER ))
+	{
+	   // Return_Dncdata.Value  = Dnc_status_value[MsgId];
+	    count1[MsgId]= 0;
+	    count2[MsgId] = 0;
+	    SignalInProgress = FALSE;
+	    Pass_Flag = 0;
+	}
+    }
+
+   if(curr_mode == DCD_MODE)
+    {
+	if (((Dcd_status_value[MsgId] == RPIM_PRE_STEP_INDENTIFIER ) || (Dcd_status_value[MsgId]  == RPIM_FLASH_PROG_IDENTIFIER )) && ((MsgInProgress == FALSE) || (Proc_Flag == MsgId)))
+	{
+	    if((Dcd_status_value[MsgId] == RPIM_PRE_STEP_INDENTIFIER ) && (countA[MsgId] <2))
+	    {
+		countA[MsgId]++;
+		Return_Dcddata.Value  = Dcd_status_value[MsgId];
+		if(countA[MsgId] == 2)
+		{
+		    MsgInProgress = TRUE;
+		    Proc_Flag = MsgId;
+		    Return_Dcddata.save_nodeA = MsgId;
+		}
+	    }
+	    else if((Dcd_status_value[MsgId] == RPIM_FLASH_PROG_IDENTIFIER ) && (countB[MsgId] < 2) && (countA[MsgId] == 2) )
+	    {
+		countB[MsgId]++;
+		Return_Dcddata.Value  = Dcd_status_value[MsgId];
+		MsgInProgress = TRUE;
+		if(countB[MsgId] == 2)
+		{
+		   Return_Dcddata.save_nodeB = MsgId;
+		}
+	    }
+	}
+	else if ((Dcd_status_value[MsgId] != RPIM_PRE_STEP_INDENTIFIER ) && (Dcd_status_value[MsgId] !=  RPIM_FLASH_PROG_IDENTIFIER ) && (dcd_com_flag[MsgId]  == ON))
+	{
+	    Return_Dcddata.Value  = Dcd_status_value[MsgId];
+	    MsgInProgress = FALSE;
+	    dcd_com_flag[MsgId] = OFF;
+	    Saved_RPIM_DiagMsg = MsgId;
+	   // RPIM_DiagMsg = MsgId;
+	    CheckDiagStatus[MsgId] = 0;  // Prateek
+	}
+	else if ((Dcd_status_value[MsgId] != RPIM_PRE_STEP_INDENTIFIER ) && (Dcd_status_value[MsgId] !=  RPIM_FLASH_PROG_IDENTIFIER ))
+	{
+	   // Return_Dcddata.Value  = Dcd_status_value[MsgId];
+
+	    countA[MsgId]= 0;
+	    countB[MsgId] = 0;
+	    MsgInProgress = FALSE;
+	    Proc_Flag = 0;
+	}
+   }
+
+}
+static void Rpim_ReInitCount(RPIM_DiagDncMsgNode_t MsgId,RPIM_Mode_Status_t curr_mode)
+{
+  if(curr_mode == DNC_MODE)
+  {
+    if ((count1[MsgId] == 2) && (count2[MsgId] == 2 ))
+    {
+	dis_com_flag[MsgId] = ON;
+	SignalInProgress = FALSE;
+	count1[MsgId]  = 0;
+	count2[MsgId]  = 0;
+    }
+  }
+
+  if(curr_mode == DCD_MODE)
+  {
+    if ((countA[MsgId] == 2) && (countB[MsgId] == 2 ))
+    {
+	dcd_com_flag[MsgId] = ON;
+	MsgInProgress = FALSE;
+	countA[MsgId]  = 0;
+	countB[MsgId]  = 0;
+    }
+  }
+
+}
+static RPIM_DiagDncMsgNode_t Rpim_FlagDisplayStatus(ulong Dis_Comm_flag)
+{
+  ulong Rpim_TempFlag =0;
+  ulong Rpim_Count =0;
+  ulong Rpim_Status =0;
+  RPIM_DiagDncMsgNode_t RPIM_ReturnMsg;
+  if(Dis_Comm_flag)
+	{
+	    Rpim_TempFlag  = Dis_Comm_flag;
+	    Rpim_Count = 0;
+	    Rpim_Status = FALSE;
+	    if( Rpim_TempFlag != 0)
+	    {
+	    	while (!Rpim_Status)
+	    	{
+		    Rpim_Status = Rpim_TempFlag&0x80000000;
+		    Rpim_TempFlag <<= 1;
+		    Rpim_Count++;
+		}
+	    }
+	    switch(Rpim_Count)
+	    {
+	    	case 15:
+			RPIM_ReturnMsg = ECM_ENG_GEN_DIS_MSG;//ECM_ENG_GEN;  17
+	    	break;
+	     	case 16:
+	    		RPIM_ReturnMsg = ECM_TM_GEN_DIS_MSG;//ECM_TM_GEN;   16
+	    	break;
+	    	case 17:
+	    		RPIM_ReturnMsg = EPS_GEN_DIS_MSG;//EPS_IND_GEN;  15
+	    	break;
+	    	case 18:
+	    		RPIM_ReturnMsg = BCM_GEN_DIS_MSG;//BCM_ECU_GEN;    14
+	    	break;
+	    	case 19:
+	    		RPIM_ReturnMsg = BCM2_GEN_DIS_MSG;//BCM2_ECU_GEN;  13
+	    	break;
+	    	case 20:
+	    		RPIM_ReturnMsg = AUTOAC_GEN_DIS_MSG;//AUTOAC_AIRCND_GEN; 12
+	    	break;
+	    	case 21:
+	    		RPIM_ReturnMsg = EPS_DIS_MSG;//EPS_DIS_COMM;  11
+	    	break;
+	    	case 22:
+	    		RPIM_ReturnMsg = ECM_DIS_MSG;//ECM_DIS_COMM; 10
+	    	break;
+		case 23:
+	    		RPIM_ReturnMsg = ECU_4E2_DIS_MSG;//NEW MESSAGE; 9
+	    	break;
+	    	case 24:
+	    		RPIM_ReturnMsg = ECU_4E3_DIS_MSG;//NEW MESSAGE; 8
+	    	break;
+	    	case 25:
+	    		RPIM_ReturnMsg = ABS_DIS_MSG;//ABS_DIS_COMM;  7
+	    	break;
+	    	case 26:
+	    		RPIM_ReturnMsg = BCM_DIS_MSG;//BCM_DIS_COMM;  6
+	    	break;
+	    	case 27:
+	    		RPIM_ReturnMsg = BCM2_DIS_MSG;//BCM2_DIS_COMM;5
+	    	break;
+	    	case 28:
+	    		RPIM_ReturnMsg = AUTOAC_DIS_MSG;//AUTOAC_DIS_COMM; 4
+	   	break;
+		case 29:
+	    		RPIM_ReturnMsg = ECU_4E9_DIS_MSG;//NEW MESSAGE;   3
+	    	break;
+	    	case 30:
+	    		RPIM_ReturnMsg = ECU_4EB_DIS_MSG;//NEW MESSAGE; 2
+	   	break;
+	    	case 31:
+	    		RPIM_ReturnMsg = AB_DIS_MSG;//AB_DIS_COMM;  1
+	    	break;
+	    	default:
+	    		RPIM_ReturnMsg = NO_ECU_DIS_MSG;//NO_ECU_MSG;
+	   	break;
+	    }
+	}
+	else if (Dis_Comm_flag == 0)
+	{
+		RPIM_ReturnMsg = NO_ECU_DIS_MSG;//NO_ECU_MSG;
+	}
+
+return RPIM_ReturnMsg;
+}
+static long double pow(long double x, long double y)
+{
+#if 0
+    long double i; /* Variable used in loop counter */
+    long double number = 1;
+    for (i = 0; i < y; ++i)
+         number *= x;
+    return(number);
+#else
+    ulong i=1;
+    while(y--)
+        i <<= 1;
+    return(long double)i;
+#endif
+}
+
+/*______ E N D _____ (rpim.c) ________________________________________________*/
