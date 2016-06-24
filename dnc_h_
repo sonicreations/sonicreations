@@ -1,0 +1,323 @@
+
+
+#ifndef RPIM_H
+#define RPIM_H
+
+/*______ I N C L U D E - F I L E S ___________________________________________*/
+
+#include "syst.h"
+#include "rpip.h"
+
+/*______ G L O B A L - D E F I N E S _________________________________________*/
+
+/*______ G L O B A L - T Y P E S _____________________________________________*/
+typedef enum
+{
+  NO_ECU_DIS_MSG = 0,
+  AB_DIS_MSG,        //4ED      "17"   1
+  ECU_4EB_DIS_MSG,   //4EB      "16"   2
+  ECU_4E9_DIS_MSG,   //4E9      "15"   3
+  AUTOAC_DIS_MSG,    //4E8      "14"   4
+  BCM2_DIS_MSG,      //4E7      "13"   5
+  BCM_DIS_MSG,       //4E6      "12"   6
+  ABS_DIS_MSG,       //4E5     "11"    7
+  ECU_4E3_DIS_MSG,   //4E3     "10"    8
+  ECU_4E2_DIS_MSG,   //4E2     "9"     9
+  ECM_DIS_MSG,       //4E1     "8"     10
+  EPS_DIS_MSG,       //4E0     "7"     11
+  AUTOAC_GEN_DIS_MSG,//3D6    "6"      12
+  BCM2_GEN_DIS_MSG,  //3D5    "5"      13
+  BCM_GEN_DIS_MSG,   //3D0    "4"      14
+  EPS_GEN_DIS_MSG,   //3C3    "3"      15
+  ECM_TM_GEN_DIS_MSG,//380    "2"      16
+  ECM_ENG_GEN_DIS_MSG,//310   "1"      17
+  ECU_4C0_DIS_MSG,
+  ECU_4C1_DIS_MSG,
+  ECU_4C2_DIS_MSG,
+  ECU_4C3_DIS_MSG,
+  ECU_4C4_DIS_MSG,
+  ECU_4C5_DIS_MSG,
+  ECU_4C6_DIS_MSG,
+  ECU_4C7_DIS_MSG,
+  ECU_4C8_DIS_MSG,
+  ECU_4C9_DIS_MSG,
+  ECU_4CA_DIS_MSG,
+  ECU_4CB_DIS_MSG,
+  ECU_4CC_DIS_MSG,
+  ECU_4CD_DIS_MSG,
+  ECU_4CE_DIS_MSG,
+  ECU_4CF_DIS_MSG,
+  ECU_4D0_DIS_MSG,
+  ECU_4D1_DIS_MSG,
+  ECU_4D2_DIS_MSG,
+  ECU_4D3_DIS_MSG,
+  ECU_4D4_DIS_MSG,
+  ECU_4D5_DIS_MSG,
+  ECU_4D6_DIS_MSG,
+  ECU_4D7_DIS_MSG,
+  ECU_4D8_DIS_MSG,
+  ECU_4D9_DIS_MSG,
+  ECU_4DA_DIS_MSG,
+  ECU_4DB_DIS_MSG,
+  ECU_4DC_DIS_MSG,
+  ECU_4DD_DIS_MSG,
+  ECU_4DE_DIS_MSG,
+  ECU_4DF_DIS_MSG,
+  ECU_4EA_DIS_MSG,
+  ECU_4EC_DIS_MSG,
+  ECU_4EE_DIS_MSG,
+  ECU_4EF_DIS_MSG,
+  ECU_EOM_DIS_MSG
+} RPIM_DiagDncMsgNode_t;
+typedef enum
+{
+ RPIM_NORMAL = 0,
+ RPIM_PRE_STEP,
+ RPIM_DNC_MODE,   /* Disable Normal Communication mode */
+ RPIM_DCD_MODE    /* Dignosis Communication Disable */
+}RPIM_Mode_t;
+
+typedef enum
+{
+ RPIM_DCD_NORMAL = 0,
+ RPIM_DCD_PRE_STEP,
+ RPIM_DCD_MODE_
+}RPIM_DiagMode_t;
+
+typedef enum
+{
+  RPIM_STATUS_NOT_OK = 0,
+  RPIM_STATUS_OK
+} RPIM_Status_t;
+
+typedef enum
+{
+  OTHER = 0,
+  ECM,
+  TCM,
+  EPS,
+  AUTOAC,
+  ALC,
+  ABS,
+  AB,
+  BCM2,
+  BCM
+} RPIM_EcuName_t;
+
+typedef enum
+{
+  NOT_ECU = 0,
+  ECM_ECU,
+  TCM_ECU,
+  EPS_ECU,
+  AUTO_AC_ECU,
+  ALC_ECU,
+  ABS_ECU,
+  AB_ECU,
+  BCM2_ECU,
+  BCM_ECU
+} RPIM_DiagEcuFlag_t;
+typedef enum
+{
+ NO_ECU =0,
+ DNC,
+ AUTO_AC,
+ EPS_IND,
+ BCM2_GEN,
+ BCM_GEN,
+ ENG_GEN,
+ TM_GEN
+}RPIM_DiagEcuName_t;
+typedef enum
+{
+  NO_ECU_MSG = 0,
+  AB_DIS_COMM,
+  AUTOAC_DIS_COMM,
+  BCM2_DIS_COMM,
+  BCM_DIS_COMM,
+  ABS_DIS_COMM,
+  ECM_DIS_COMM,
+  EPS_DIS_COMM,
+  AUTOAC_AIRCND_GEN,
+  BCM2_ECU_GEN,
+  BCM_ECU_GEN,
+  EPS_IND_GEN,
+  ECM_TM_GEN,
+  ECM_ENG_GEN
+} RPIM_EcuNodeMsg_t;
+/*---------------------------*/
+typedef struct  //prashant soni
+{ ubyte Value;
+  RPIM_DiagDncMsgNode_t save_nodeA;
+  RPIM_DiagDncMsgNode_t save_nodeB;
+} Return_data_t;
+typedef struct  //prashant soni
+{
+  ubyte Value;
+  RPIM_DiagDncMsgNode_t save_nodeA;
+  RPIM_DiagDncMsgNode_t save_nodeB;
+} Return_dataDiag_t;
+typedef enum  //prashant soni
+{
+ NO_MODE = 0,
+ DCD_MODE,
+ DNC_MODE
+} RPIM_Mode_Status_t;
+
+typedef enum  //prashant soni
+{
+ OFF = 0,
+ ON
+} RPIM_Comm_Status_t;
+/*---------------------------*/
+typedef struct
+{
+ RPIM_Mode_t Mode; /* Current mode of the ecu */
+ bool_t CanTransNormal;
+ RPIM_DiagDncMsgNode_t ECU_Name;
+} RPIM_EcuMode_t;
+typedef struct
+{
+ RPIM_DiagMode_t Mode; /* Current mode of the ecu */
+ bool_t CanTransNormal;
+ RPIM_DiagEcuName_t ECU_Name;
+} RPIM_DiagEcuMode_t;
+typedef struct
+{
+ RPIM_Mode_t Mode; /* Current mode of the ecu */
+ RPIM_DiagEcuName_t Node;
+ bool_t CanTransNormal;
+}RPIM_EcuModeDiag_t;
+
+/*______ G L O B A L - D A T A _______________________________________________*/
+
+extern ubyte RPIP_PreSetUpModeSet;
+extern ubyte RPIP_DisNormCommModeSet;
+extern RPIM_DiagDncMsgNode_t RPIM_Msg;
+extern ubyte DCDStatusCAN;
+/*______ G L O B A L - M A C R O S ___________________________________________*/
+
+/*______ G L O B A L - F U N C T I O N S - P R O T O T Y P E S _______________*/
+
+/******************************************************************************/
+/* Name : RPIM_Init                                                           */
+/* Role : Allows to initialise the RPIP module                               */
+/* Interface : none                                                           */
+/* Pre-condition :                                                            */
+/* Behaviour :                                                                */
+/*   DO                                                                       */
+/*    [ Reset all the Can Messages counter  ]                                 */
+/*   OD                                                                       */
+/******************************************************************************/
+extern void RPIM_Init(void);
+
+/******************************************************************************/
+/* Name : RPIM_Task_ts                                                        */
+/* Role : Read CAN value of Disble normal communication from both ECM and TCM */
+/*        and Raise the flag for stoping transmission of CAN from all ECU and */
+/*        send the signal for the LCD for the reprogramming indication        */
+/* Interface: none                                                            */
+/* Pre-condition : none                                                       */
+/* Constraints : none                                                         */
+/* Behavior :                                                                 */
+/* DO                                                                         */
+/*  IF (Request to shift to the Programming mode) THEN   		      */
+/*       Start Counting the required Counts                                   */
+/*    IF (Entered into The Flash programming mode) THEN                       */
+/*         [Give an Alert on the LCD for the same ]			      */
+/*      IF (Progamming Succeded and Ignition off ) THEN                       */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*      IF ( Ignition Off ) THEN  		        	              */
+/*        [Resume the normal Operation and start transmitting CAN Msgs]       */
+/*      ELSE                                                                  */
+/*        [Perform the normal operation]                                      */
+/*      FI                                                                    */
+/*    FI                                                                      */
+/*  FI                                                                        */
+/* OD                                                                         */
+/******************************************************************************/
+extern TASK (RPIM_Task_ts);
+
+/******************************************************************************/
+/*Name : RPIM_GetEcmCurrentState                                              */
+/*Role : Returns the Current state of the ECM				      */
+/*Interface :                                                                 */
+/*Pre-condition : none                                                        */
+/*Constraints :                                                               */
+/*  DO                                                                        */
+/*Behavior :                                                                  */
+/*  OD                                                                        */
+/******************************************************************************/
+extern RPIM_EcuMode_t RPIM_GetEcmCurrentState(void);
+
+
+
+/******************************************************************************/
+/*Name : RPIM_GetTcmCurrentState                                              */
+/*Role : Returns the Current state of the TCM			              */
+/*Interface :                                                                 */
+/*Pre-condition : none                                                        */
+/*Constraints :                                                               */
+/*Behavior :                                                                  */
+/*  DO                                                                        */
+/*  OD                                                                        */
+/******************************************************************************/
+extern ubyte RPIM_GetTcmCurrentState(void);
+
+
+/******************************************************************************/
+/*Name : RPIM_GetCanTransCurrentState                                         */
+/*Role : Returns the Current state of the can transmission	              */
+/*Interface : Return the Flag for CAN Transmission State                      */
+/*Pre-condition : none                                                        */
+/*Constraints :                                                               */
+/*Behavior :                                                                  */
+/*  DO                                                                        */
+/*  OD                                                                        */
+/******************************************************************************/
+extern ubyte RPIM_GetCanTransCurrentState(void);
+
+/******************************************************************************/
+/*Name : RPIM_GetCanTransCurrentState                                         */
+/*Role :Callback function for the Cur state of the CAN transmission for NETM  */
+/*Interface : return the state of the Can transmission                        */
+/*Pre-condition : none                                                        */
+/*Constraints :                                                               */
+/*Behavior :                                                                  */
+/*  DO                                                                        */
+/*    Return false if CanTramission Normal else return TRUE                   */
+/*  OD                                                                        */
+/******************************************************************************/
+extern ubyte RPIM_DisableDiagStatus(void);
+
+/******************************************************************************/
+/*Name : DISP_WakeUp                                                          */
+/*Role : Wake the the re-programing mode indication management module         */
+/*Interface : void                                                            */
+/*Pre-condition : none                                                        */
+/*Constraints : must be called one time after a system wake up                */
+/*Behavior :                                                                  */
+/*  DO                                                                        */
+/*    [start RPIM task]                                                       */
+/*  OD                                                                        */
+/******************************************************************************/
+extern void RPIM_WakeUp(void);
+
+/******************************************************************************/
+/*Name : RPIM_Sleep                                                           */
+/*Role : Put to sleep the re-programing mode indication management            */
+/*Interface : void                                                            */
+/*Pre-condition : none                                                        */
+/*Constraints : must be called one time after a system sleep                  */
+/*Behavior :                                                                  */
+/*  DO                                                                        */
+/*    [Stop RPIM Task]                                                        */
+/*  OD                                                                        */
+/******************************************************************************/
+extern void RPIM_Sleep (void);
+
+extern bool_t RPIM_GetDNCStatus();
+#endif /* RPIM_H */
+
+
+/*______ E N D _____ (rpim.h) ________________________________________________*/
